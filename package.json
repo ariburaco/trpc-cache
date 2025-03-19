@@ -34,7 +34,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
-    "dev": "vitest",
+    "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

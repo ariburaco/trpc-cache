@@ -1,6 +1,14 @@
 import { performance } from 'node:perf_hooks';
 
 /**
+ * Create a new WeakSet for tracking objects during serialization
+ * @returns A new WeakSet for tracking objects
+ */
+function createSeenObjectsSet(): WeakSet<object> {
+  return new WeakSet();
+}
+
+/**
  * Check if an object is serializable for caching
  * @param obj Object to check
  * @returns True if the object is serializable
@@ -24,6 +32,28 @@ export function isSerializable(obj: unknown): boolean {
 }
 
 /**
+ * Safe JSON stringify with circular reference handling
+ * @param value Value to stringify
+ * @returns String representation or null if failed
+ */
+export function safeStringify(value: unknown): string | null {
+  const seen = new WeakSet();
+  try {
+    return JSON.stringify(value, (key, val) => {
+      if (typeof val === 'object' && val !== null) {
+        if (seen.has(val)) {
+          return '[Circular Reference]';
+        }
+        seen.add(val);
+      }
+      return val;
+    });
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
  * Sanitize an object for caching by removing non-serializable properties
  * @param obj Object to sanitize
  * @returns Sanitized object suitable for caching
@@ -31,7 +61,7 @@ export function isSerializable(obj: unknown): boolean {
 export function sanitizeForCache(obj: unknown): unknown {
   if (!isSerializable(obj)) {
     if (Array.isArray(obj)) {
-      return obj.map(sanitizeForCache);
+      return obj.map(item => sanitizeForCache(item));
     }
     if (obj && typeof obj === 'object') {
       const clean: Record<string, unknown> = {};
