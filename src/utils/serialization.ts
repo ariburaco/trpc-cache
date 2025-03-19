@@ -61,7 +61,7 @@ export function safeStringify(value: unknown): string | null {
 export function sanitizeForCache(obj: unknown): unknown {
   if (!isSerializable(obj)) {
     if (Array.isArray(obj)) {
-      return obj.map(item => sanitizeForCache(item));
+      return obj.map((item) => sanitizeForCache(item));
     }
     if (obj && typeof obj === 'object') {
       const clean: Record<string, unknown> = {};

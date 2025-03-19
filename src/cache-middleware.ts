@@ -237,8 +237,8 @@ export function createCacheMiddleware<
           // Successfully retrieved from cache
           return {
             ...cachedData,
-            context: ctx,
-          }
+            ctx,
+          };
         }
 
         logger.info({
@@ -354,7 +354,7 @@ export function createCacheMiddleware<
             const parsedData = JSON.parse(cachedData);
             return {
               ...parsedData,
-              context: ctx,
+              ctx,
             };
           } catch (parseError) {
             // If parsing fails, log and return the raw value

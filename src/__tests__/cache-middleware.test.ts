@@ -45,10 +45,10 @@ describe('Cache Middleware', () => {
 
       const mockData = { id: 1, name: 'Test' };
       const { next, getCallCount } = createMockNext(mockData);
-
+      const ctx = createMockContext('user-1');
       // First call should miss cache and execute the procedure
       const result1 = await middleware({
-        ctx: createMockContext('user-1'),
+        ctx,
         path: 'test.procedure',
         next,
         input: { query: 'test' },
@@ -59,13 +59,16 @@ describe('Cache Middleware', () => {
 
       // Second call should hit cache and not execute the procedure again
       const result2 = await middleware({
-        ctx: createMockContext('user-1'),
+        ctx,
         path: 'test.procedure',
         next,
         input: { query: 'test' },
       });
 
-      expect(result2).toEqual(mockData);
+      expect(result2).toEqual({
+        ...mockData,
+        ctx,
+      });
       expect(getCallCount()).toBe(1); // Still 1, not 2
 
       // Different user should miss cache
@@ -108,7 +111,10 @@ describe('Cache Middleware', () => {
         input: { query: 'test' },
       });
 
-      expect(result2).toEqual(mockData);
+      expect(result2).toEqual({
+        ...mockData,
+        ctx: createMockContext('user-1'),
+      });
       expect(getCallCount()).toBe(1); // Still 1, not 2
     });
 
