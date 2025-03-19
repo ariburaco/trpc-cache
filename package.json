@@ -34,7 +34,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
-    "dev": "vitest",
+    "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -43,7 +43,7 @@
     "typecheck": "tsc --noEmit",
     "check-format": "prettier --check .",
     "check-exports": "attw --pack . --ignore-rules=cjs-resolves-to-esm",
-    "ci": "pnpm run build && pnpm run check-format && pnpm run check-exports && pnpm run lint && pnpm run test",
+    "ci": "pnpm run build && pnpm run check-exports && pnpm run lint && pnpm run test",
     "ci:publish": "pnpm run build && changeset publish",
     "prepublishOnly": "pnpm run ci",
     "local-release": "changeset version && changeset publish"

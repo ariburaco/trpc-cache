@@ -4,11 +4,11 @@ import {
   ConsoleLogger,
   RedisConnectionFactory,
   createConditionalLogger,
+  deleteCached,
   getElapsedMs,
   sanitizeForCache,
-  type LogEntry,
+  safeStringify,
 } from './utils/index.js';
-
 /**
  * Generic type for the tRPC context
  */
@@ -90,6 +90,18 @@ const defaultCacheConfig: CacheConfig = {
 
 // Create the logger
 const loggerService = new ConsoleLogger('CacheMiddleware');
+
+/**
+ * Extract only the data portion from a tRPC response object
+ * This prevents circular references in the context and other non-serializable parts
+ */
+function extractData(result: unknown): unknown {
+  if (!result || typeof result !== 'object') return result;
+
+  const { ctx, ...data } = result as { ctx: TRPCContext; data: unknown };
+
+  return data;
+}
 
 /**
  * Create a cache key based on the procedure path, input, and context
@@ -197,12 +209,13 @@ export function createCacheMiddleware<
     try {
       if (validatedConfig.useUpstash) {
         const cacheStartTime = performance.now();
-        const upstashRedis = validatedConfig.upstashConfig
+        const redis = validatedConfig.upstashConfig
           ? RedisConnectionFactory.getUpstashRedis(
               validatedConfig.upstashConfig,
             )
           : RedisConnectionFactory.getUpstashRedis();
-        const cachedData = await upstashRedis.get(cacheKey);
+
+        const cachedData = await redis.get(cacheKey);
         const cacheElapsedMs = getElapsedMs(cacheStartTime);
 
         if (cachedData) {
@@ -221,7 +234,11 @@ export function createCacheMiddleware<
               },
             },
           });
-          return cachedData;
+          // Successfully retrieved from cache
+          return {
+            ...cachedData,
+            ctx,
+          };
         }
 
         logger.info({
@@ -243,46 +260,77 @@ export function createCacheMiddleware<
         const result = await next();
         const execElapsedMs = getElapsedMs(execStartTime);
 
-        const sanitizedResult = sanitizeForCache(result);
+        // Extract only the data portion of the result to avoid circular references
+        const dataToCache = extractData(result);
 
-        const cacheSetStartTime = performance.now();
+        // Ensure we're not trying to cache circular references by using safe serialization first
+        try {
+          // First check if we can safely stringify it
+          const safeData = safeStringify(dataToCache);
+          if (!safeData) {
+            logger.warn({
+              message: 'Data could not be safely stringified for cache',
+              metadata: {
+                path,
+                type: 'upstash',
+              },
+            });
+            // Return the result without caching
+            return result;
+          }
 
-        // Handle permanent caching (no TTL)
-        if (ttl === undefined) {
-          await upstashRedis.set(cacheKey, sanitizedResult);
-        } else {
-          await upstashRedis.set(cacheKey, sanitizedResult, {
-            ex: ttl,
-          } as const);
-        }
+          // If stringification succeeded, we know it's safe to cache
+          const sanitizedData = sanitizeForCache(dataToCache);
 
-        const cacheSetElapsedMs = getElapsedMs(cacheSetStartTime);
+          const cacheSetStartTime = performance.now();
+          // Handle permanent caching (no TTL)
+          if (ttl === undefined) {
+            await redis.set(cacheKey, sanitizedData);
+          } else {
+            await redis.set(cacheKey, sanitizedData, { ex: ttl });
+          }
 
-        logger.info({
-          message: 'Cache set',
-          metadata: {
-            userId,
-            path,
-            cacheKey,
-            ttl: ttl !== undefined ? ttl : 'permanent',
-            type: 'upstash',
-            globalCache: validatedConfig.globalCache,
-            userSpecific: validatedConfig.userSpecific,
-            timing: {
-              executionMs: execElapsedMs,
-              cacheSetMs: cacheSetElapsedMs,
-              totalMs: getElapsedMs(startTime),
+          const cacheSetElapsedMs = getElapsedMs(cacheSetStartTime);
+
+          logger.info({
+            message: 'Cache set',
+            metadata: {
+              userId,
+              path,
+              cacheKey,
+              ttl: ttl !== undefined ? ttl : 'permanent',
+              type: 'upstash',
+              globalCache: validatedConfig.globalCache,
+              userSpecific: validatedConfig.userSpecific,
+              timing: {
+                executionMs: execElapsedMs,
+                cacheSetMs: cacheSetElapsedMs,
+                totalMs: getElapsedMs(startTime),
+              },
             },
-          },
-        });
+          });
+        } catch (cacheError) {
+          logger.error({
+            message: 'Failed to set cache',
+            metadata: {
+              error:
+                cacheError instanceof Error
+                  ? cacheError.message
+                  : String(cacheError),
+              path,
+              type: 'upstash',
+            },
+          });
+        }
 
         return result;
       } else {
         const cacheStartTime = performance.now();
-        const redisClient = await RedisConnectionFactory.getStandardRedis(
+        const redis = await RedisConnectionFactory.getStandardRedis(
           validatedConfig.redisUrl,
         );
-        const cachedData = await redisClient.get(cacheKey);
+
+        const cachedData = await redis.get(cacheKey);
         const cacheElapsedMs = getElapsedMs(cacheStartTime);
 
         if (cachedData) {
@@ -301,7 +349,28 @@ export function createCacheMiddleware<
               },
             },
           });
-          return JSON.parse(cachedData);
+          // Parse the cached data and return it
+          try {
+            const parsedData = JSON.parse(cachedData);
+            return {
+              ...parsedData,
+              ctx,
+            };
+          } catch (parseError) {
+            // If parsing fails, log and return the raw value
+            logger.warn({
+              message: 'Failed to parse cached data',
+              metadata: {
+                error:
+                  parseError instanceof Error
+                    ? parseError.message
+                    : String(parseError),
+                path,
+                type: 'redis',
+              },
+            });
+            return cachedData;
+          }
         }
 
         logger.info({
@@ -323,40 +392,66 @@ export function createCacheMiddleware<
         const result = await next();
         const execElapsedMs = getElapsedMs(execStartTime);
 
-        const sanitizedResult = sanitizeForCache(result);
+        // Extract only the data portion of the result to avoid circular references
+        const dataToCache = extractData(result);
 
-        const cacheSetStartTime = performance.now();
+        // Try to safely serialize the data for caching
+        try {
+          // First check if we can safely stringify it
+          const safeData = safeStringify(dataToCache);
+          if (!safeData) {
+            logger.warn({
+              message: 'Data could not be safely stringified for cache',
+              metadata: {
+                path,
+                type: 'redis',
+              },
+            });
+            // Return the result without caching
+            return result;
+          }
 
-        // Handle permanent caching (no TTL)
-        if (ttl === undefined) {
-          await redisClient.set(cacheKey, JSON.stringify(sanitizedResult));
-        } else {
-          await redisClient.setEx(
-            cacheKey,
-            ttl,
-            JSON.stringify(sanitizedResult),
-          );
-        }
+          const cacheSetStartTime = performance.now();
 
-        const cacheSetElapsedMs = getElapsedMs(cacheSetStartTime);
+          // Handle permanent caching (no TTL)
+          if (ttl === undefined) {
+            await redis.set(cacheKey, safeData);
+          } else {
+            await redis.setEx(cacheKey, ttl, safeData);
+          }
 
-        logger.info({
-          message: 'Cache set',
-          metadata: {
-            userId,
-            path,
-            cacheKey,
-            ttl: ttl !== undefined ? ttl : 'permanent',
-            type: 'redis',
-            globalCache: validatedConfig.globalCache,
-            userSpecific: validatedConfig.userSpecific,
-            timing: {
-              executionMs: execElapsedMs,
-              cacheSetMs: cacheSetElapsedMs,
-              totalMs: getElapsedMs(startTime),
+          const cacheSetElapsedMs = getElapsedMs(cacheSetStartTime);
+
+          logger.info({
+            message: 'Cache set',
+            metadata: {
+              userId,
+              path,
+              cacheKey,
+              ttl: ttl !== undefined ? ttl : 'permanent',
+              type: 'redis',
+              globalCache: validatedConfig.globalCache,
+              userSpecific: validatedConfig.userSpecific,
+              timing: {
+                executionMs: execElapsedMs,
+                cacheSetMs: cacheSetElapsedMs,
+                totalMs: getElapsedMs(startTime),
+              },
             },
-          },
-        });
+          });
+        } catch (cacheError) {
+          logger.error({
+            message: 'Failed to set cache',
+            metadata: {
+              error:
+                cacheError instanceof Error
+                  ? cacheError.message
+                  : String(cacheError),
+              path,
+              type: 'redis',
+            },
+          });
+        }
 
         return result;
       }
@@ -376,7 +471,6 @@ export function createCacheMiddleware<
         },
       });
 
-      // If cache fails, fallback to normal execution
       return next();
     }
   };
@@ -421,7 +515,9 @@ export async function invalidateCache(
       const upstashRedis = config.upstashConfig
         ? RedisConnectionFactory.getUpstashRedis(config.upstashConfig)
         : RedisConnectionFactory.getUpstashRedis();
+
       await upstashRedis.del(cacheKey);
+
       logger.info({
         message: 'Cache invalidated',
         metadata: {
@@ -436,7 +532,9 @@ export async function invalidateCache(
       const redisClient = await RedisConnectionFactory.getStandardRedis(
         config.redisUrl,
       );
+
       await redisClient.del(cacheKey);
+
       logger.info({
         message: 'Cache invalidated',
         metadata: {
