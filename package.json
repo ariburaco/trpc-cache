@@ -1,0 +1,70 @@
+{
+  "name": "trpc-redis-cache",
+  "version": "0.1.0",
+  "description": "Redis caching middleware for tRPC",
+  "keywords": [
+    "trpc",
+    "redis",
+    "cache",
+    "middleware",
+    "typescript"
+  ],
+  "homepage": "https://github.com/ariburaco/trpc-redis-cache",
+  "bugs": {
+    "url": "https://github.com/ariburaco/trpc-redis-cache/issues"
+  },
+  "author": "ariburaco",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ariburaco/trpc-redis-cache.git"
+  },
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "dev": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "check-format": "prettier --check .",
+    "check-exports": "attw --pack . --ignore-rules=cjs-resolves-to-esm",
+    "ci": "npm run build && npm run check-format && npm run check-exports && npm run lint && npm run test",
+    "prepublishOnly": "npm run ci",
+    "local-release": "changeset version && changeset publish",
+    "example:express": "cd examples/trpc-integration && npm run dev"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.17.4",
+    "@changesets/cli": "^2.28.1",
+    "@trpc/server": "next",
+    "@types/node": "^22.13.10",
+    "@vitest/coverage-v8": "^3.0.9",
+    "prettier": "^3.5.3",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.34.5",
+    "redis": "^4.7.0",
+    "zod": "^3.24.2"
+  },
+  "peerDependencies": {
+    "@trpc/server": "^10.0.0"
+  }
+}
