@@ -13,11 +13,14 @@ import {
  * Generic type for the tRPC context
  */
 export interface TRPCContext {
-  session: {
-    user?: {
-      id?: string;
-    };
-  } | null;
+  session:
+    | {
+        user?: {
+          id?: string;
+        };
+      }
+    | null
+    | undefined;
   [key: string]: unknown;
 }
 

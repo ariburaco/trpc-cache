@@ -16,6 +16,12 @@ A Redis caching middleware for tRPC, providing easy-to-use caching capabilities 
 
 ```bash
 npm install trpc-redis-cache
+
+pnpm add trpc-redis-cache
+
+yarn add trpc-redis-cache
+
+bun add trpc-redis-cache
 ```
 
 ## Basic Usage
@@ -73,24 +79,19 @@ await invalidateCache(
 
 ## Examples
 
-See the [examples directory](./examples) for full implementation examples:
-
-- Basic standalone usage
-- Complete tRPC integration with Express server
-- User-specific caching
-- Cache invalidation endpoints
+Will be added in future.
 
 ## Development
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Run tests
-npm test
+pnpm test
 
 # Build the package
-npm run build
+pnpm run build
 ```
 
 ## License
