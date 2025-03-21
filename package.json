@@ -9,14 +9,14 @@
     "middleware",
     "typescript"
   ],
-  "homepage": "https://github.com/ariburaco/trpc-cache",
+  "homepage": "https://github.com/ariburaco/trpc-redis-cache",
   "bugs": {
-    "url": "https://github.com/ariburaco/trpc-cache/issues"
+    "url": "https://github.com/ariburaco/trpc-redis-cache/issues"
   },
   "author": "ariburaco",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ariburaco/trpc-cache.git"
+    "url": "git+https://github.com/ariburaco/trpc-redis-cache.git"
   },
   "license": "MIT",
   "files": [
