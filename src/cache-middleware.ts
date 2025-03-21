@@ -1,13 +1,13 @@
+import { MiddlewareResult } from '@trpc/server/unstable-core-do-not-import';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import {
   ConsoleLogger,
   RedisConnectionFactory,
   createConditionalLogger,
-  deleteCached,
   getElapsedMs,
-  sanitizeForCache,
   safeStringify,
+  sanitizeForCache,
 } from './utils/index.js';
 /**
  * Generic type for the tRPC context
@@ -198,7 +198,7 @@ export function createCacheMiddleware<
   }: {
     ctx: TContext;
     path: string;
-    next: () => Promise<unknown>;
+    next: () => Promise<MiddlewareResult<object>>;
     input?: unknown;
   }) => {
     const startTime = performance.now();
@@ -259,6 +259,24 @@ export function createCacheMiddleware<
         const execStartTime = performance.now();
         const result = await next();
         const execElapsedMs = getElapsedMs(execStartTime);
+
+        // Check if the result is is "ok"
+        // If it's not ok, we don't want to cache the result
+        // This is to prevent caching errors
+        // We can't use the result.ok property because it's not typed
+        // So we need to check if the result is an object and has an ok property
+        // If it doesn't, we return the result without caching
+
+        if (!result.ok) {
+          logger.warn({
+            message: 'Result is not ok. Result will not be cached.',
+            metadata: {
+              path,
+            },
+          });
+          // Return the result without caching
+          return result;
+        }
 
         // Extract only the data portion of the result to avoid circular references
         const dataToCache = extractData(result);
@@ -391,6 +409,22 @@ export function createCacheMiddleware<
         const execStartTime = performance.now();
         const result = await next();
         const execElapsedMs = getElapsedMs(execStartTime);
+
+        // Check if the result is is "ok"
+        // If it's not ok, we don't want to cache the result
+        // This is to prevent caching errors
+        // We can't use the result.ok property because it's not typed
+        // So we need to check if the result is an object and has an ok property
+        // If it doesn't, we return the result without caching
+        if (!result.ok) {
+          logger.warn({
+            message: 'Result is not ok. Result will not be cached.',
+            metadata: {
+              path,
+            },
+          });
+          return result;
+        }
 
         // Extract only the data portion of the result to avoid circular references
         const dataToCache = extractData(result);

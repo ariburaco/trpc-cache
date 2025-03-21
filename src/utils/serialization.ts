@@ -1,14 +1,6 @@
 import { performance } from 'node:perf_hooks';
 
 /**
- * Create a new WeakSet for tracking objects during serialization
- * @returns A new WeakSet for tracking objects
- */
-function createSeenObjectsSet(): WeakSet<object> {
-  return new WeakSet();
-}
-
-/**
  * Check if an object is serializable for caching
  * @param obj Object to check
  * @returns True if the object is serializable

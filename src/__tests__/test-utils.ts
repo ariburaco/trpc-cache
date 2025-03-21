@@ -1,3 +1,7 @@
+import {
+  MiddlewareResult,
+  TRPCError,
+} from '@trpc/server/unstable-core-do-not-import';
 import { NoopLogger } from '../utils/logger.js';
 
 // Mock Redis client for testing
@@ -92,9 +96,37 @@ export const silentLogger = new NoopLogger();
 export function createMockNext(returnValue: unknown) {
   let callCount = 0;
 
-  const next = async () => {
+  const next = async (): Promise<MiddlewareResult<object>> => {
     callCount++;
-    return returnValue;
+    return {
+      ok: true,
+      marker: 'middlewareMarker' as const,
+      data: returnValue,
+      error: null,
+    } as unknown as MiddlewareResult<object>;
+  };
+
+  return {
+    next,
+    getCallCount: () => callCount,
+  };
+}
+
+// Mock failing next function
+export function createMockFailingNext() {
+  let callCount = 0;
+
+  const next = async (): Promise<MiddlewareResult<object>> => {
+    callCount++;
+    return {
+      ok: false,
+      marker: 'middlewareMarker' as const,
+      data: null,
+      error: new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Test error',
+      }),
+    } as unknown as MiddlewareResult<object>;
   };
 
   return {
